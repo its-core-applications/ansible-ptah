@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+
+import logging
+import secrets
+import sys
+
+import dynaconf
+import ldap3
+
+from ldap3.core.exceptions import LDAPException
+from ldap3.utils import dn
+from towerlib import Tower
+
+
+settings = dynaconf.Dynaconf(
+    settings_file=[
+        'settings.yaml',
+        'settings.yml',
+        '.secrets.yaml',
+        '.secrets.yml',
+    ],
+)
+
+
+def ldap_members(group_name):
+    with ldap3.Connection(ldap3.Server(settings['LDAP_HOST'])) as conn:
+        conn.search(settings['LDAP_BASE'], '(cn={})'.format(group_name), attributes=['member'])
+        if conn.result['description'] == 'noSuchObject' or not conn.entries:
+            raise LDAPException('group not found: {}'.format(group_name))
+        elif len(conn.entries) != 1:
+            # I don't think this should happen, but maybe it can?
+            raise LDAPException('ambiguous group: {}'.format(group_name))
+
+        return [dn.parse_dn(x)[0][1].lower() for x in conn.entries[0].member]
+
+
+def tower_team(organization, team_name):
+    team = organization.get_team_by_name(team_name)
+    if not team:
+        logging.getLogger(__name__).info('Creating team "%s"', team_name)
+        team = organization.create_team(team_name, '')
+    return team
+
+
+def tower_user(client, user_name):
+    user = client.get_user_by_username(user_name)
+    if not user:
+        logging.getLogger(__name__).info('Creating user %s', user_name)
+        user = client.create_user(
+            user_name,
+            # Randomized password, since they should be using SSO
+            secrets.token_urlsafe(20),
+            email='{}@umich.edu'.format(user_name),
+        )
+    return user
+
+
+def reconcile_team(client, team, group):
+    logger = logging.getLogger(__name__) 
+    real_members = set([x.username for x in team.users])
+    target_members = set(ldap_members(group))
+
+    for user in real_members - target_members:
+        logger.info('Removing %s from "%s"', user, team.name)
+        team.remove_user_as_member(user)
+
+    for user in target_members - real_members:
+        u = tower_user(client, user)
+        logger.info('Adding %s to "%s"', user, team.name)
+        team.add_user_as_member(user)
+
+
+def main():
+    # Configure root logger
+    logger = logging.getLogger()
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter('%(asctime)s %(name)s: %(message)s', '%Y-%m-%dT%H:%M:%S'))
+    logger.addHandler(handler)
+    logger.setLevel(settings['LOG_LEVEL'].upper())
+    logger = logging.getLogger(__name__)
+
+    client = Tower(settings['TOWER_HOST'], settings['TOWER_USER'], settings['TOWER_PASSWORD'], secure=True)
+
+    # Set up superusers
+    admins = set()
+    for group in settings.get('admins', []):
+        admins.update(ldap_members(group))
+
+    for user in admins:
+        tower_user(client, user)
+
+    admins.add('admin')
+
+    for user in client.users:
+        if user.username in admins:
+            if not user.is_superuser:
+                logger.info('Adding superuser privileges to %s', user.username)
+                user.is_superuser = True
+        else:
+            if user.is_superuser:
+                logger.info('Removing superuser privileges from %s', user.username)
+                user.is_superuser = False
+
+    # Set up organizations
+    for o_name, o_config in settings['organizations'].items():
+        logger.debug('Working on organization "%s"', o_name)
+        org = client.get_organization_by_name(o_name)
+        if not org:
+            logger.info('Creating organization "%s"', o_name)
+            org = client.create_organization(o_name)
+
+        # Reconcile admins
+        target_members = set(ldap_members(o_name))
+        real_members = set()
+        for role in org.object_roles:
+            if role.name == 'Admin':
+                real_members = set([x.username for x in role.users])
+
+        for user in target_members - real_members:
+            logger.info('Adding %s as an admin of "%s"', user, o_name)
+            u = tower_user(client, user)
+            u.associate_with_organization_role(o_name, 'Admin')
+
+        for user in real_members - target_members:
+            logger.info('Removing %s as an admin of "%s"', user, o_name)
+            u = tower_user(client, user)
+            u.disassociate_from_organization_role(o_name, 'Admin')
+
+        # Add any configured teams
+        if o_config:
+            for t_name, t_config in o_config.get('teams', {}).items():
+                team = tower_team(org, t_name)
+                for role in t_config or ['Execute']:
+                    team.add_organization_role_by_name(o_name, role)
+                reconcile_team(client, team, t_name)
+
+
+if __name__ == '__main__':
+    main()

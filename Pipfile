@@ -1,0 +1,14 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+towerlib = ">=3.3.0"
+ldap3 = ">=2.0"
+dynaconf = {extras = ["yaml"], version = ">=3.0"}
+
+[dev-packages]
+
+[requires]
+python_version = "3.6"

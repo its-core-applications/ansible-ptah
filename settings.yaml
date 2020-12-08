@@ -1,0 +1,5 @@
+LDAP_HOST: ldaps://ldap.umich.edu
+LDAP_BASE: ou=User Groups,ou=Groups,dc=umich,dc=edu
+TOWER_HOST: ansible.dsc.umich.edu
+TOWER_USER: admin
+LOG_LEVEL: info
