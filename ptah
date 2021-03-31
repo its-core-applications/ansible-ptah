@@ -4,6 +4,8 @@ import logging
 import secrets
 import sys
 
+from logging.handlers import SysLogHandler
+
 import dynaconf
 import ldap3
 
@@ -75,6 +77,9 @@ def main():
     logger = logging.getLogger()
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(logging.Formatter('%(asctime)s %(name)s: %(message)s', '%Y-%m-%dT%H:%M:%S'))
+    logger.addHandler(handler)
+    handler = SysLogHandler(address='/dev/log')
+    handler.ident = 'ptah: '
     logger.addHandler(handler)
     logger.setLevel(settings['LOG_LEVEL'].upper())
     logger = logging.getLogger(__name__)
