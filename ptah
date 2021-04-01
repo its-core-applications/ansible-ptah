@@ -108,6 +108,7 @@ def main():
 
     # Set up organizations
     for o_name, o_config in settings['organizations'].items():
+        o_name = o_name.lower()
         logger.debug('Working on organization "%s"', o_name)
         org = client.get_organization_by_name(o_name)
         if not org:
@@ -134,7 +135,7 @@ def main():
         # Add any configured teams
         if o_config:
             for t_name, t_config in o_config.get('teams', {}).items():
-                team = tower_team(org, t_name)
+                team = tower_team(org, t_name.lower())
                 for role in t_config or []:
                     team.add_organization_role_by_name(o_name, role)
                 reconcile_team(client, team, t_name)
