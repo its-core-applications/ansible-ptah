@@ -3,6 +3,9 @@ admins:
 organizations:
   ia ansible tower:
   its core infrastructure:
+  its is csi smdt:
+    teams:
+      IAM Core Team:
   its system support unix:
   its systems support windows:
   virtualization and cloud infrastructure team:
