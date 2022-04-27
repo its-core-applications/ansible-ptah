@@ -117,6 +117,9 @@ def main():
 
         # Reconcile admins
         target_members = set(ldap_members(o_name))
+        if o_config:
+            for addl_group in o_config.get('admins', []):
+                target_members.update(ldap_members(addl_group))
         real_members = set()
         for role in org.object_roles:
             if role.name == 'Admin':

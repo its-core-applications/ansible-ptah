@@ -4,6 +4,8 @@ organizations:
   ia ansible tower:
   its core infrastructure:
   its is csi smdt:
+    admins:
+      - iam ansible controller admins
     teams:
       IAM Core Team:
       IAM Ansible Access:

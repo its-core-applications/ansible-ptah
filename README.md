@@ -24,9 +24,19 @@ organizations:
   flowerysong:
 ```
 
-Organizations and MCommunity groups are a 1:1 correspondence. All members of
-the group are added as admins of the organization, and anyone not in the group
-will have their admin role removed.
+All members of the group that the organization is named after are
+automatically added as admins of the organization.
+
+Additional admin groups can also be configured:
+```yaml
+organizations:
+  flowerysong:
+    admins:
+      - blackops
+```
+
+Any organization admin that is no longer in a configured MCommunity group
+will be removed.
 
 For delegating access to people outside the main group, teams can also be
 configured within each organization.
